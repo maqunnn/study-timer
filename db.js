@@ -1,55 +1,43 @@
-import {start, toggle, finish} from './core.js';
+import{METHODS,SKILL_CODES,start,setPaused,resume,toggleFocus,finish}from'./core.js';
 let opening;
-export function db() {
-  return opening ||= new Promise((resolve,reject) => {
-    const r = indexedDB.open('four-study-v1',1);
-    r.onupgradeneeded = () => {r.result.createObjectStore('state'); r.result.createObjectStore('sessions',{keyPath:'session_id'});};
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
-    r.onblocked = () => reject(Error('別のタブを閉じて開き直してください。'));
-  });
+function migrateSession(row){
+  if(row.learning_method)return{...row,pending:!!row.pending};
+  const skill=SKILL_CODES.includes(row.skill)?[row.skill]:[];
+  const{skill:legacySkill,...rest}=row;
+  return{...rest,learning_method:'other',skills:JSON.stringify(skill),focus_mode:'off',focus_seconds:0,events:'[]',pending:!!row.pending};
 }
-export async function readAll() {
-  const d = await db();
-  return new Promise((resolve,reject) => {
-    const tx=d.transaction(['state','sessions']);
-    const s=tx.objectStore('state').get('current'), rows=tx.objectStore('sessions').getAll(), cfg=tx.objectStore('state').get('config');
-    tx.oncomplete=()=>resolve({current:s.result||null,rows:rows.result,config:cfg.result||{endpoint:'',token:''}});
-    tx.onerror=()=>reject(tx.error);
-  });
+function migrateCurrent(s){
+  if(!s||s.startedAt!==undefined)return s;
+  const skill=SKILL_CODES.includes(s.skill)?[s.skill]:[];
+  return{id:s.id,method:'other',timezone:s.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,startedAt:s.started,state:s.mode==='paused'?'paused':'active',stateChangedAt:s.changed,activeMs:s.activeMs||0,focusOn:false,focusChangedAt:null,focusMs:0,events:[{type:'start',at:s.started}]};
 }
-// One transaction serializes changes across tabs and atomically ends + queues a session.
-export async function change(action, skill, expectedId, expectedMode) {
-  const d=await db();
-  return new Promise((resolve,reject)=>{
-    const tx=d.transaction(['state','sessions'],'readwrite'); const state=tx.objectStore('state');
-    let failure;
-    const req=state.get('current');
-    req.onsuccess=()=>{
-      try {
-        const s=req.result, now=Date.now();
-        if (action==='start') {
-          if(s) return;
-          state.put(start(skill,now,Intl.DateTimeFormat().resolvedOptions().timeZone,crypto.randomUUID()),'current');
-        } else {
-          if(!s || s.id!==expectedId || s.mode!==expectedMode) return;
-          if(action==='toggle') state.put(toggle(s,now),'current');
-          if(action==='finish') {tx.objectStore('sessions').add({...finish(s,now),pending:true}); state.delete('current');}
-        }
-      } catch(e) {failure=e;tx.abort();}
-    };
-    tx.oncomplete=resolve; tx.onabort=()=>reject(failure||tx.error||Error('保存できませんでした。')); tx.onerror=()=>{};
-  });
+export function db(){return opening||=new Promise((resolve,reject)=>{
+  const r=indexedDB.open('four-study-v1',2);
+  r.onupgradeneeded=(event)=>{
+    const x=r.result,tx=r.transaction;
+    if(!x.objectStoreNames.contains('state'))x.createObjectStore('state');
+    let store;if(!x.objectStoreNames.contains('sessions'))store=x.createObjectStore('sessions',{keyPath:'session_id'});else store=tx.objectStore('sessions');
+    if(event.oldVersion<2){const rows=store.openCursor();rows.onsuccess=()=>{const c=rows.result;if(c){c.update(migrateSession(c.value));c.continue();}};const current=tx.objectStore('state').get('current');current.onsuccess=()=>{if(current.result)tx.objectStore('state').put(migrateCurrent(current.result),'current');};}
+  };
+  r.onsuccess=()=>resolve(r.result);r.onerror=()=>{opening=null;reject(r.error);};r.onblocked=()=>reject(Error('ほかのタイマー画面を閉じて再度お試しください。'));
+});}
+export async function readAll(){const d=await db();return new Promise((resolve,reject)=>{const tx=d.transaction(['state','sessions']);const current=tx.objectStore('state').get('current'),draft=tx.objectStore('state').get('draft'),rows=tx.objectStore('sessions').getAll(),config=tx.objectStore('state').get('config');tx.oncomplete=()=>resolve({current:current.result||null,draft:draft.result||null,rows:rows.result||[],config:config.result||{endpoint:'',token:''}});tx.onerror=()=>reject(tx.error);});}
+// IndexedDB serializes read/write transactions across tabs; IDs and states prevent stale taps.
+export async function change(action,method,expectedId,expectedState){
+ const d=await db();return new Promise((resolve,reject)=>{const tx=d.transaction(['state','sessions'],'readwrite'),state=tx.objectStore('state');let failure;
+  const current=state.get('current'),draft=state.get('draft');current.onsuccess=()=>draft.onsuccess=()=>{try{
+   const s=current.result,waiting=draft.result,now=Date.now();
+   if(action==='start'){if(s||waiting)return;if(!METHODS.includes(method))throw Error('学習方法を選び直してください。');state.put(start(method,now,Intl.DateTimeFormat().resolvedOptions().timeZone,crypto.randomUUID()),'current');}
+   else if(action==='pause'){if(!s||s.id!==expectedId||s.state!=='active')return;state.put(setPaused(s,now),'current');}
+   else if(action==='resume'){if(!s||s.id!==expectedId||s.state!=='paused')return;state.put(resume(s,now),'current');}
+   else if(action==='focus'){if(!s||s.id!==expectedId||s.state!=='active')return;state.put(toggleFocus(s,now),'current');}
+   else if(action==='finish'){if(!s||s.id!==expectedId||s.state!==expectedState)return;state.put({...s,activeMs:s.activeMs+(s.state==='active'?now-s.stateChangedAt:0),state:'ended',stateChangedAt:now,endedAt:now,focusMs:s.focusMs+(s.focusOn?now-(s.focusChangedAt??s.stateChangedAt):0),focusOn:false,events:[...s.events,{type:'end',at:now}]},'draft');state.delete('current');}
+   else if(action==='saveDraft'){if(!waiting||waiting.id!==expectedId)return;const record=finish(waiting,waiting.endedAt,method||[]);tx.objectStore('sessions').put({...record,pending:true});state.delete('draft');}
+   else throw Error('画面を更新してお試しください。');
+  }catch(e){failure=e;tx.abort();}};
+  tx.oncomplete=resolve;tx.onabort=()=>reject(failure||tx.error||Error('端末への保存に失敗しました。'));tx.onerror=()=>{};
+ });
 }
-export async function saveConfig(config) {
-  const d=await db();
-  return new Promise((resolve,reject)=>{const t=d.transaction('state','readwrite');t.objectStore('state').put(config,'config');t.oncomplete=resolve;t.onabort=()=>reject(t.error);});
-}
-export async function acknowledge(ids) {
-  const d=await db();
-  return new Promise((resolve,reject)=>{
-    const t=d.transaction('sessions','readwrite'), store=t.objectStore('sessions');
-    for(const id of ids){const r=store.get(id);r.onsuccess=()=>{if(r.result)store.put({...r.result,pending:false});};}
-    t.oncomplete=resolve;t.onabort=()=>reject(t.error);
-  });
-}
+export async function saveConfig(config){const d=await db();return new Promise((res,rej)=>{const t=d.transaction('state','readwrite');t.objectStore('state').put(config,'config');t.oncomplete=res;t.onabort=()=>rej(t.error);});}
+export async function acknowledge(ids){const d=await db();return new Promise((res,rej)=>{const t=d.transaction('sessions','readwrite'),s=t.objectStore('sessions');for(const id of ids){const r=s.get(id);r.onsuccess=()=>{if(r.result)s.put({...r.result,pending:false});};}t.oncomplete=res;t.onabort=()=>rej(t.error);});}
+export async function exportBackup(){const{current,draft,rows}=await readAll();return{schema_version:2,exported_at:new Date().toISOString(),current,draft,sessions:rows};}
