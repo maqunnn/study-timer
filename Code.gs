@@ -21,7 +21,7 @@ function rawSheet_(book){
   // schema v2 already has the new column family
   const existing=sheet.getRange(1,1,1,HEADERS.length).getValues()[0];if(existing.some((x,i)=>x!==HEADERS[i]))throw Error('HEADER_MISMATCH');return sheet;
  }
- const legacySchema=actual.join('|');if(legacySchema!==EARLIER_HEADERS.join('|')&&legacySchema!==OLD_HEADERS.join('|'))throw Error('HEADER_MISMATCH:'+actual.join('|'));
+ const legacySchema=actual.join('|'),shiftedEarlier=actual.slice(1).join('|')===EARLIER_HEADERS.slice(1).join('|');if(legacySchema!==EARLIER_HEADERS.join('|')&&legacySchema!==OLD_HEADERS.join('|')&&!shiftedEarlier)throw Error('HEADER_MISMATCH');
  // One-time non-destructive data migration from the first released schema.
  const prior=sheet.getLastRow()>1?sheet.getRange(2,1,sheet.getLastRow()-1,10).getValues():[];
  sheet.getRange(1,1,1,HEADERS.length).setValues([HEADERS]);
@@ -40,7 +40,7 @@ function doPost(e){let lock;try{
  const append=[],acks=[];for(const s of batch){const keys=HEADERS.filter(h=>h!=='recorded_at'),row=keys.map(h=>s[h]);if(known.has(s.session_id)){const old=known.get(s.session_id);let j=0;for(let i=0;i<HEADERS.length;i++){if(HEADERS[i]==='recorded_at')continue;if(String(row[j++])!==String(old[i]))throw Error('ID_CONFLICT');}}else{const full=HEADERS.map(h=>h==='recorded_at'?new Date().toISOString():s[h]);append.push(full);known.set(s.session_id,full);}acks.push(s.session_id);}
  if(append.length){const at=sheet.getLastRow()+1,last=at+append.length-1;if(last>sheet.getMaxRows())sheet.insertRowsAfter(sheet.getMaxRows(),last-sheet.getMaxRows());sheet.getRange(at,1,append.length,5).setNumberFormat('@');sheet.getRange(at,6,append.length,3).setNumberFormat('0');sheet.getRange(at,9,append.length,3).setNumberFormat('@');sheet.getRange(at,12,append.length,3).setNumberFormat('@');sheet.getRange(at,1,append.length,HEADERS.length).setValues(append);SpreadsheetApp.flush();}
  return json_({ok:true,ack:acks});
- }catch(e){const known=['SETUP_REQUIRED','HEADER_MISMATCH','INVALID_REQUEST','UNAUTHORIZED','INVALID_SESSION','ID_CONFLICT'];return json_({ok:false,error:e.message.startsWith('HEADER_MISMATCH:')?e.message:known.includes(e.message)?e.message:'SERVER_BUSY_OR_ERROR'});}finally{if(lock&&lock.hasLock())lock.releaseLock();}}
+ }catch(e){const known=['SETUP_REQUIRED','HEADER_MISMATCH','INVALID_REQUEST','UNAUTHORIZED','INVALID_SESSION','ID_CONFLICT'];return json_({ok:false,error:known.includes(e.message)?e.message:'SERVER_BUSY_OR_ERROR'});}finally{if(lock&&lock.hasLock())lock.releaseLock();}}
 function validate_(s){const fail=()=>{throw Error('INVALID_SESSION');};
  if(!s||typeof s!=='object'||typeof s.session_id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s.session_id))fail();
  if(!METHODS.includes(s.learning_method)||typeof s.skills!=='string')fail();

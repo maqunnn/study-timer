@@ -1,65 +1,43 @@
-# データモデルと分析の定義
+# データ設計
 
-## Raw Sessions：事実テーブル
+## Raw Sessions
 
-1セッション=開始から終了まで。1行は1つの学習セッション。`session_id` が主キー相当です。全セッションはインドネシア語学習を前提とし、言語名を毎行に重複保存しません。時刻文字列はUTC、日付は開始時の現地日付です。
+1セッションを1行で保存します。端末側は終了時にIndexedDBへ確定し、Apps Scriptは `session_id` をキーとして再送を冪等に処理します。Raw列に年月や曜日などの派生値を重複保存しません。
 
-| 列 | 型・例 | 定義 |
-| --- | --- | --- |
-| session_id | UUID v4 | 端末で開始時に発行し、再送しても同じ値 |
-| local_date | 2026-10-04 | 開始時タイムゾーンでの開始日 |
-| skill | Listening / Speaking / Reading / Writing | 4技能の固定コード |
-| start_at | 2026-10-04T01:00:00.000Z | 端末が記録する開始時刻、UTC ISO 8601 |
-| end_at | 2026-10-04T01:32:00.000Z | 端末が記録する終了時刻、UTC ISO 8601 |
-| study_seconds | 整数、0以上 | 学習中だった時間、端数切り捨て |
-| pause_seconds | 整数、0以上 | elapsed_seconds − study_seconds |
-| elapsed_seconds | 整数、0以上 | floor((end_at − start_at)/1000) |
-| timezone | Asia/Tokyo / Asia/Jakarta 等 | 開始時のIANAタイムゾーン |
-| recorded_at | UTC ISO 8601 | 初回保存時にApps Scriptが生成する時刻 |
+| 列 | 内容 |
+| --- | --- |
+| `session_id` | UUID v4。端末で発行する一意ID |
+| `local_date` | 開始時のタイムゾーンで見た日付 |
+| `learning_method` | `material` / `vocabulary` / `ai` / `other` |
+| `start_at`, `end_at` | UTC ISO 8601の絶対時刻 |
+| `study_seconds` | 一時停止を除いた学習秒数 |
+| `pause_seconds` | 一時停止秒数 |
+| `elapsed_seconds` | 開始から終了までの総秒数 |
+| `skills` | `listening` 等の固定技能コードをJSON配列で格納。複数選択・空配列に対応 |
+| `focus_mode` | `off` / `self_reported` |
+| `focus_seconds` | 手動FOCUS ONの合計秒数 |
+| `timezone` | 開始時のIANAタイムゾーン |
+| `recorded_at` | Apps Scriptが初回受信時に付けるUTC時刻 |
+| `events` | 開始・一時停止・再開・FOCUS切替・終了の時刻履歴。再計算と一時停止回数の分析に使う |
 
-`created_at` 相当は `recorded_at` に統一。再送で更新しません。year / month / week / weekday / start_hour はRawに持たず、分析更新時に生成します。local_dateとelapsed_secondsは要求項目として保持し、保存時にタイムスタンプとの整合性を検証します。
+Apps Scriptの初回接続時にRaw見出しを更新します。以前の列名や、一部見出しが異なる旧形式からの移行では、行のID・日付・時刻・時間を保持し、旧技能を認識できる場合のみ技能へ移します。旧形式に学習方法・FOCUS・イベント時刻がない場合は `other` / `off` / 空履歴として補います。
 
-例：
+## 端末保存と同期
 
-```json
-{"session_id":"f4d4f365-b29c-45c1-a06b-f9da2c08aebd","local_date":"2026-10-04","skill":"Listening","start_at":"2026-10-04T01:00:00.000Z","end_at":"2026-10-04T01:32:00.000Z","study_seconds":1800,"pause_seconds":120,"elapsed_seconds":1920,"timezone":"Asia/Tokyo","recorded_at":"2026-10-04T01:32:01.000Z"}
-```
+IndexedDBには、進行中セッション、終了後の技能選択待ち記録、完了ログ、接続設定、未送信状態を保存します。バックアップJSONには接続トークンを含めません。未送信の記録は最大20件ずつ送信し、Apps Scriptから各IDの確認応答を受けた場合だけ端末の未送信状態を解除します。認証・通信エラー時は削除せず保持します。
 
-## 端末側の状態
+## 分析シート
 
-IndexedDB `four-study-v1` に次を保存します。
+Apps Scriptの「分析シートを更新」で、Rawから次の表を再生成します。
 
-- `state/current`：ID、技能、開始時刻、直前の状態変更時刻、active/paused、確定済み学習ミリ秒、開始時タイムゾーン。
-- `state/config`：公開エンドポイントと個人用トークン。バックアップには含めません。
-- `sessions`：完了セッションと `pending` フラグ。フラグは通信状態でありRawには送信しません。送信後も端末ログはTODAYとバックアップのため保持します。
+- `Daily` / `Weekly` / `Monthly`：日・月曜日始まりの週・月ごとのセッション数と秒数
+- `Methods`：教材/単語/AI/その他ごとの時間と平均
+- `Skills`：技能別の時間。複数技能のセッション時間は技能数で均等配分します
+- `Method Skills`：`AI × speaking` のような組み合わせ。技能ごとの均等配分を使います
+- `Weekdays` / `Hours`：開始日の曜日と開始時刻別の時間
+- `Focus` / `Summary`：FOCUS利用、総学習時間、活動日平均、現在・最長継続日数、一時停止率など
+- `Analysis Sessions`：Rawを分析しやすい形に展開した確認用ビュー
 
-表示は`Date.now()`との差で再計算。終了時の「完了ログ追加」と「進行中削除」は同じreadwriteトランザクション内で実行します。保存失敗時にはどちらも確定しません。同じ配信元の別タブも同じトランザクションで直列化し、古いID・状態の操作は無視します。画面更新はBroadcastChannelと復帰時再読込で追従します。
+日跨ぎのセッションは開始日に全量を計上します。週は月曜日の日付で識別します。技能が複数選択された場合のSkills/Method Skills合計はRaw全体の学習時間と一致するよう整数秒を配ります。技能なしのセッションはMethodsやDailyには含まれますが、Skillsには計上しません。
 
-## 配信保証
-
-最大20件ずつPOST。応答 `{ok:true,ack:[session_id,...]}` で送信した全IDが確認できた場合だけ端末のpendingを解除します。通信タイムアウト・不明な応答・一部IDのみの応答では全件を保持します。
-
-サーバーはScriptLock内で重複検査→追記→flush。保存後に応答が消えた場合も同じIDの再送で既存行を確認します。同一ID・同一内容は成功、同一ID・別内容は競合エラー。バッチ内の重複も抑止します。この意味でat-least-once送信＋冪等な保存です。Sheets自体はRDBMSのトランザクションDBではありません。外部編集やサービス障害に対する完全なexactly-once保証ではありません。
-
-再送は前面で30秒ごとに試行し、失敗時は10秒から最大5分の間隔で抑制。復帰・起動時にも試行します。手動再送は抑制を解除します。認証失敗なども自動削除せず保留します。永久エラーのあるバッチは後続も止まるため、設定・ログを確認して再試行してください。
-
-## 分析の前提
-
-- 日別：local_dateで学習秒数を合計。日跨ぎは開始日に全量計上。
-- 週別：開始日の属する月曜日の日付をキーとする。年をまたいでも衝突しません。
-- 月別：local_dateのYYYY-MM。
-- 技能配分：各技能のSUM(study_seconds) ÷ 全技能のSUM(study_seconds)。Skillsからグラフ化できます。
-- 平均セッション時間：SUM(study_seconds) ÷ セッション数。0秒で終了したセッションも回数に含みます。
-- 曜日：local_dateの曜日、月曜=1〜日曜=7。
-- 時間帯：start_atを各行のtimezoneに変換した開始時刻の0〜23時。学習時間全体を開始時間帯に計上します。
-- 学習日数：study_seconds > 0の記録がある日付の数。
-- 最長継続日数：上記の日付が暦日で連続した最大日数。
-- 現在継続日数：Sheets設定のタイムゾーンの今日を基準に、今日が学習済みなら今日から、未学習なら昨日から逆算。昨日も未学習なら0。
-- 一時停止率：SUM(pause_seconds) ÷ SUM(elapsed_seconds)。分母0は0。セッション別比率の単純平均ではありません。
-- 分析更新時点以降の新規Rawは次回更新まで含みません。学習のない日はDailyに行を作らないため、ゼロの日を含むグラフには別途カレンダーテーブルと結合します。
-
-## 正規化・拡張
-
-固定のskill文字列は現時点の小さな列挙型。説明や翻訳を加えるなら `Skills Master(skill_id, label_ja, label_en)` を設け、分析側で結合します。教材は `Materials`、教材との関連は別テーブルで管理します。複数言語・複数ユーザー対応時はlanguage_id/user_idと認証を追加し、既存ログの移行を設計します。
-
-正確な深夜分割や学習した各分の時間帯分析には、現在の集計済み1行だけでは情報が不足します。その要件が出た場合は `Session Segments(session_id, segment_no, mode, start_at, end_at)` を子テーブルとして追加してください。現在のRawから一時停止の発生時刻や回数は復元できません。
+一時停止率は `合計pause_seconds ÷ 合計elapsed_seconds`、活動日平均は `合計study_seconds ÷ 学習秒数が正の日数` です。曜日・時間帯の値はセッション全体を開始時点に帰属させます。セッションを深夜や一時停止境界で厳密分割する分析には、将来 `Session Segments` のような子テーブルを追加する必要があります。
