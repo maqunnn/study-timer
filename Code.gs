@@ -21,11 +21,11 @@ function rawSheet_(book){
   // schema v2 already has the new column family
   const existing=sheet.getRange(1,1,1,HEADERS.length).getValues()[0];if(existing.some((x,i)=>x!==HEADERS[i]))throw Error('HEADER_MISMATCH');return sheet;
  }
- if(actual.join('|')!==EARLIER_HEADERS.join('|'))throw Error('HEADER_MISMATCH');
+ const legacySchema=actual.join('|');if(legacySchema!==EARLIER_HEADERS.join('|')&&legacySchema!==OLD_HEADERS.join('|'))throw Error('HEADER_MISMATCH');
  // One-time non-destructive data migration from the first released schema.
  const prior=sheet.getLastRow()>1?sheet.getRange(2,1,sheet.getLastRow()-1,10).getValues():[];
  sheet.getRange(1,1,1,HEADERS.length).setValues([HEADERS]);
-  if(prior.length){const converted=prior.map(r=>[r[0],r[1],'other',r[3],r[4],r[5],r[6],r[7],JSON.stringify(SKILLS.includes(String(r[2]).toLowerCase())?[String(r[2]).toLowerCase()]:[]),'off',0,r[8],r[9],'[]']);sheet.getRange(2,1,converted.length,HEADERS.length).setValues(converted);}
+  if(prior.length){const converted=prior.map(r=>{const skill=String(r[2]).toLowerCase();return[r[0],r[1],'other',r[3],r[4],r[5],r[6],r[7],JSON.stringify(SKILLS.includes(skill)?[skill]:[]),'off',0,r[8],r[9],'[]'];});sheet.getRange(2,1,converted.length,HEADERS.length).setValues(converted);}
  sheet.setFrozenRows(1);sheet.getRange(1,1,1,HEADERS.length).setFontWeight('bold');return sheet;
 }
 function json_(x){return ContentService.createTextOutput(JSON.stringify(x)).setMimeType(ContentService.MimeType.JSON);}
