@@ -10,7 +10,7 @@ function render(){if(!data)return;const{current,draft,rows}=data;
   try{
     if(!current&&!draft){const today=localDate(Date.now(),Intl.DateTimeFormat().resolvedOptions().timeZone);const total=rows.filter(r=>r.local_date===today).reduce((sum,r)=>sum+r.study_seconds,0);$('today').textContent=formatTime(total);}
     if(current){$('method').textContent=METHOD_LABELS[current.method]||'その他';$('clock').textContent=formatTime(duration(current,Date.now()).study_seconds,true);$('timerState').textContent=current.state==='active'?'計測中':'一時停止中';$('timerState').dataset.state=current.state;$('pause').textContent=current.state==='active'?'一時停止':'再開';$('focus').textContent=current.focusOn?'FOCUS ON':'FOCUS OFF';$('focus').setAttribute('aria-pressed',String(current.focusOn));}
-    if(draft){$('sessionSummary').textContent=`${METHOD_LABELS[draft.method]||'その他'} ・ ${formatTime(Math.floor(draft.activeMs/1000))}`;if(chosenDraftId!==draft.id){chosenDraftId=draft.id;chosen.clear();document.querySelectorAll('[data-skill]').forEach(b=>b.setAttribute('aria-pressed','false'));}}
+    if(draft){$('sessionSummary').textContent=`${METHOD_LABELS[draft.method]||'その他'} ・ ${formatTime(Math.floor(draft.activeMs/1000),true)}`;if(chosenDraftId!==draft.id){chosenDraftId=draft.id;chosen.clear();document.querySelectorAll('[data-skill]').forEach(b=>b.setAttribute('aria-pressed','false'));}}
   }catch(e){notice=e.message;}
   updateStatus();
 }
