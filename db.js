@@ -2,9 +2,11 @@ import{METHODS,SKILL_CODES,start,setPaused,resume,toggleFocus,finish}from'./core
 let opening;
 function migrateSession(row){
   if(row.learning_method)return{...row,pending:!!row.pending};
-  const skill=SKILL_CODES.includes(row.skill)?[row.skill]:[];
+  const oldSkill=String(row.skill||'').toLowerCase(),skill=SKILL_CODES.includes(oldSkill)?[oldSkill]:[];
   const{skill:legacySkill,...rest}=row;
-  return{...rest,learning_method:'other',skills:JSON.stringify(skill),focus_mode:'off',focus_seconds:0,events:'[]',pending:!!row.pending};
+  const start=Date.parse(row.start_at),end=Date.parse(row.end_at),pause=Math.max(0,Number(row.pause_seconds)||0),pauseAt=Math.max(start,end-pause*1000);
+  const events=[{type:'start',at:start},...(pause>0?[{type:'pause',at:pauseAt},{type:'resume',at:pauseAt}]:[]),{type:'end',at:end}];
+  return{...rest,learning_method:'other',skills:JSON.stringify(skill),focus_mode:'off',focus_seconds:0,events:JSON.stringify(events),pending:!!row.pending};
 }
 function migrateCurrent(s){
   if(!s||s.startedAt!==undefined)return s;
