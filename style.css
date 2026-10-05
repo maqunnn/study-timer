@@ -58,8 +58,7 @@ h2 { font-size: 18px; font-weight: 400; margin: 0 0 28px; }
 .sessionSummary { display: inline-block; margin: 0 0 20px; padding: 8px 14px; background: transparent; border-radius: 0; color: var(--ink); font-size: 15px; font-variant-numeric: tabular-nums; }
 .skillOptions { margin-bottom: 18px; }
 .skillOptions button { min-height: 58px; font-size: 16px; }
-.skillOptions button[aria-pressed="true"] { background: var(--blue); color: #fff; font-size: 20px; font-weight: 700; }
-.skillOptions button[aria-pressed="true"]::before { content: "✓ "; }
+.skillOptions button[aria-pressed="true"] { background: var(--blue); color: #fff; font-weight: 600; }
 .noneHint { margin: 14px 0 0; font-size: 12px; }
 #save { margin-top: 10px; }
 
