@@ -3,13 +3,13 @@ import{duration,formatTime,localDate,METHOD_LABELS,SKILL_CODES}from'./core.js';
 import{sync}from'./sync.js';
 const $=id=>document.getElementById(id);let data=null,working=false,notice='',chosen=new Set(),chosenDraftId=null,channel;
 try{channel=new BroadcastChannel('study-timer-v2');channel.onmessage=()=>refresh();}catch{}
-function updateStatus(){const pending=data?.rows.filter(x=>x.pending).length||0;$('status').textContent=notice||(pending?'未送信 '+pending+'件 · 接続時に自動送信':data?.config.endpoint?'':'');$('status').classList.toggle('has-content',!!$('status').textContent);}
+function updateStatus(){const pending=data?.rows.filter(x=>x.pending).length||0;$('status').textContent=notice||(pending?`未送信 ${pending}件 · 接続時に自動送信`:data?.config.endpoint?'':'');$('status').classList.toggle('has-content',!!$('status').textContent);}
 function render(){if(!data)return;const{current,draft,rows}=data;
   $('home').hidden=!!(current||draft);$('timer').hidden=!current;$('skillPicker').hidden=!draft;
   try{
     if(!current&&!draft){const today=localDate(Date.now(),Intl.DateTimeFormat().resolvedOptions().timeZone);const total=rows.filter(r=>r.local_date===today).reduce((sum,r)=>sum+r.study_seconds,0);$('today').textContent=formatTime(total);}
     if(current){$('method').textContent=METHOD_LABELS[current.method]||'その他';$('clock').textContent=formatTime(duration(current,Date.now()).study_seconds,true);$('timerState').textContent=current.state==='active'?'計測中':'一時停止中';$('timerState').dataset.state=current.state;$('pause').textContent=current.state==='active'?'一時停止':'再開';$('focus').textContent=current.focusOn?'FOCUS ON':'FOCUS OFF';$('focus').setAttribute('aria-pressed',String(current.focusOn));}
-    if(draft){$('sessionSummary').textContent=(METHOD_LABELS[draft.method]||'その他')+' ・ '+formatTime(Math.floor(draft.activeMs/1000),true);if(chosenDraftId!==draft.id){chosenDraftId=draft.id;chosen.clear();document.querySelectorAll('[data-skill]').forEach(b=>b.setAttribute('aria-pressed','false'));}}
+    if(draft){$('sessionSummary').textContent=`${METHOD_LABELS[draft.method]||'その他'} ・ ${formatTime(Math.floor(draft.activeMs/1000),true)}`;if(chosenDraftId!==draft.id){chosenDraftId=draft.id;chosen.clear();document.querySelectorAll('[data-skill]').forEach(b=>b.setAttribute('aria-pressed','false'));}}
   }catch(e){notice=e.message;}
   updateStatus();
 }
