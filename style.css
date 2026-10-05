@@ -82,3 +82,5 @@ h2 { font-size: 18px; font-weight: 400; margin: 0 0 28px; }
 .settings form .primary { margin-top: 22px; }
 .settings .status { text-align: left; overflow-wrap: anywhere; min-height: 20px; }
 .settings hr { border: 0; border-top: 1px solid #e1e5e9; margin: 28px 0; }
+.skillOptions button { border: 0; outline: none; box-shadow: none; }
+.skillOptions button:focus-visible { outline: none; box-shadow: none; }
