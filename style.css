@@ -14,9 +14,8 @@
 * { box-sizing: border-box; }
 html { min-height: 100%; background: #fff; }
 body { min-height: 100svh; margin: 0; }
-button, a { -webkit-tap-highlight-color: transparent; }
-button { font: inherit; touch-action: manipulation; cursor: pointer; }
-button:focus-visible { outline: none; background-color: var(--blue); color: #fff; font-size: 20px; font-weight: 700; }
+button, a { -webkit-tap-highlight-color: transparent; }button { font: inherit; touch-action: manipulation; cursor: pointer; }
+button:focus-visible { outline: none; }
 a:focus-visible { outline: none; color: var(--blue); font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
 input:focus-visible { outline: none; box-shadow: inset 0 -3px 0 var(--blue); }
 [hidden] { display: none !important; }
@@ -47,8 +46,7 @@ h2 { font-size: 18px; font-weight: 400; margin: 0 0 28px; }
 .timerState::before { content: ""; width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--blue); }
 .timerState[data-state="paused"] { color: var(--ink-muted); font-weight: 400; }
 .timerState[data-state="paused"]::before { background: #8a929b; }
-.focus { display: block; margin: 0 auto 24px; border: 0; background: transparent; color: var(--ink-muted); min-height: 44px; padding: 8px 14px; font-size: 12px; letter-spacing: 1px; }
-.focus[aria-pressed="true"] { color: #fff; background: var(--blue); border-radius: 4px; font-size: 20px; font-weight: 700; }
+.focus { display: block; margin: 0 auto 24px; border: 0; background: transparent; color: var(--ink-muted); min-height: 44px; padding: 8px 14px; font-size: 12px; letter-spacing: 1px; }.focus[aria-pressed="true"] { color: #fff; background: var(--blue); border-radius: 4px; }
 .primary { display: block; width: 100%; min-height: 60px; border: 0; border-radius: 6px; background: var(--blue); color: #fff; font-size: 20px; font-weight: 700; }
 .primary:active { transform: scale(.99); }
 .quiet { display: block; border: 0; background: transparent; color: var(--ink-muted); font-size: 13px; min-height: 44px; margin: 6px auto; padding: 8px 20px; }
@@ -57,8 +55,7 @@ h2 { font-size: 18px; font-weight: 400; margin: 0 0 28px; }
 .hint { color: var(--ink-muted); font-size: 13px; line-height: 1.5; margin: 0 0 22px; }
 .sessionSummary { display: inline-block; margin: 0 0 20px; padding: 8px 14px; background: transparent; border-radius: 0; color: var(--ink); font-size: 15px; font-variant-numeric: tabular-nums; }
 .skillOptions { margin-bottom: 18px; }
-.skillOptions button { min-height: 58px; font-size: 16px; }
-.skillOptions button[aria-pressed="true"] { background: var(--blue); color: #fff; font-weight: 600; }
+.skillOptions button { min-height: 58px; font-size: 16px; }.skillOptions button[aria-pressed="true"] { background: var(--blue); color: #fff; }
 .noneHint { margin: 14px 0 0; font-size: 12px; }
 #save { margin-top: 10px; }
 
