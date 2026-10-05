@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fff">
+  <title>Belajarを更新しています</title>
+  <style>body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#343a40;background:#fff}p{padding:24px;text-align:center}</style>
+</head>
+<body>
+  <p>Belajarを更新しています…</p>
+  <script>
+    (async () => {
+      const appPath = new URL('./', location.href).pathname;
+      const registrations = await navigator.serviceWorker?.getRegistrations() ?? [];
+      await Promise.all(registrations.filter(registration => new URL(registration.scope).pathname === appPath).map(registration => registration.unregister()));
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.filter(name => name.startsWith('four-shell-') || name.startsWith('belajar-shell-')).map(name => caches.delete(name)));
+      location.replace('./?updated=' + Date.now());
+    })();
+  </script>
+</body>
+</html>
